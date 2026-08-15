@@ -71,6 +71,18 @@ store or rotate, and published versions carry a provenance attestation. If you
 would rather use a classic token, add it as the `NPM_TOKEN` secret instead —
 the workflow falls back to it.
 
+## What gates a release
+
+The production build gates everything: if it does not compile, nothing is
+published.
+
+Lint, tests and `npm audit` are reported but do not fail the run, because all
+three currently fail on issues that predate this pipeline — accessibility
+errors in `code-modal.component.html`, a spec file importing `async` from
+`@angular/core/testing` (removed in Angular 12), and advisories that need the
+Angular range widened. Once those are fixed, remove `continue-on-error` from
+the corresponding steps in `ci.yml` and `release.yml` to make them binding.
+
 ## Security scanning
 
 - **Dependabot** opens grouped dependency pull requests every Monday.

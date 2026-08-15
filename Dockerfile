@@ -7,6 +7,10 @@ FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 
 WORKDIR /app
 
+# The build must not depend on Nx Cloud, which is unreachable and unauthorized
+# from inside an image build.
+ENV NX_NO_CLOUD=true
+
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
