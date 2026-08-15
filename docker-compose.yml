@@ -1,0 +1,17 @@
+services:
+  vidaa-edge:
+    # Use the published image, or `docker compose build` to build from source.
+    image: ghcr.io/weinzii/vidaa-edge:latest
+    build: .
+    container_name: vidaa-edge
+    restart: unless-stopped
+    ports:
+      # The TV expects https://vidaahub.com/ on the default port, so 443 on the
+      # host maps to 8443 in the container (which runs unprivileged).
+      - '443:8443'
+    volumes:
+      # Certificate (generated on first start) and scan sessions persist here.
+      - vidaa-edge-data:/data
+
+volumes:
+  vidaa-edge-data:

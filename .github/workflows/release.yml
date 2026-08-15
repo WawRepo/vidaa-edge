@@ -1,0 +1,231 @@
+name: Release
+
+# Releases are cut by hand from the Actions tab: pick a version, and this
+# workflow builds it, publishes the npm package and the container image, then
+# tags the commit and writes the release page.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact version like 1.4.0. Leave empty to bump the patch of the last release.'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Build and verify everything without publishing or tagging'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # commit the version bump, push the tag, create the release
+  packages: write # push to GHCR
+  id-token: write # npm trusted publishing (OIDC) and provenance
+  security-events: write # upload the image scan
+
+jobs:
+  release:
+    name: Build, publish and tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse to release from a side branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Releases must be cut from main (got ${{ github.ref }})." >&2
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci --no-audit --no-fund
+
+      # Everything is verified before anything is published, so a failing test
+      # cannot leave a half-released version behind.
+      - run: npm run lint
+      - run: npm test
+
+      # Report-only, same as CI: advisories are surfaced, but a dependency
+      # advisory does not block a release that is otherwise ready.
+      - name: Audit runtime dependencies
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
+      # Git tags are the record of what has actually been released, so the next
+      # version is derived from them rather than from package.json - which can
+      # drift, and starts at 0.0.0 in a fresh fork.
+      - name: Determine version
+        id: version
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          CURRENT=$(git tag --list 'v[0-9]*' | sed 's/^v//' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+          CURRENT=${CURRENT:-0.0.0}
+          echo "Last released version: $CURRENT"
+
+          REQUESTED="${REQUESTED#v}" # tolerate "v1.4.0"
+
+          if [ -z "$REQUESTED" ]; then
+            NEXT=$(echo "$CURRENT" | awk -F. '{print $1"."$2"."$3+1}')
+            echo "No version given - bumping patch to $NEXT"
+          else
+            if ! echo "$REQUESTED" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+              echo "::error::'$REQUESTED' is not a semver number like 1.4.0"
+              exit 1
+            fi
+            NEXT="$REQUESTED"
+            # Must move forward, or npm would reject the publish anyway.
+            if [ "$(printf '%s\n%s\n' "$CURRENT" "$NEXT" | sort -V | tail -n1)" = "$CURRENT" ]; then
+              echo "::error::$NEXT is not newer than the last release $CURRENT"
+              exit 1
+            fi
+            echo "Releasing requested version $NEXT"
+          fi
+
+          if git rev-parse -q --verify "refs/tags/v$NEXT" > /dev/null; then
+            echo "::error::Tag v$NEXT already exists"
+            exit 1
+          fi
+
+          npm version "$NEXT" --no-git-tag-version --allow-same-version
+          echo "number=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEXT" >> "$GITHUB_OUTPUT"
+
+      - run: npm run build:prod
+
+      - name: Resolve image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      # --- publish ---------------------------------------------------------
+
+      # Enabled by setting the repository variable PUBLISH_NPM to "true" once
+      # npm trusted publishing is configured for the package. Forks and
+      # first-time setups skip this step instead of failing the release.
+      - name: Publish to npm
+        if: vars.PUBLISH_NPM == 'true'
+        run: npm publish --provenance --access public ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ !inputs.dry_run }}
+          load: ${{ inputs.dry_run }}
+          platforms: ${{ inputs.dry_run && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ steps.version.outputs.number }}
+            ${{ steps.image.outputs.name }}:latest
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.number }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan released image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.image.outputs.name }}:${{ steps.version.outputs.number }}
+          format: sarif
+          output: trivy-release.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Upload scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && !inputs.dry_run
+        with:
+          sarif_file: trivy-release.sarif
+          category: trivy-release
+
+      # --- record ----------------------------------------------------------
+
+      - name: Commit and tag
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): ${{ steps.version.outputs.tag }}"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "${{ steps.version.outputs.tag }}"
+          git push origin HEAD:main --follow-tags
+
+      - name: Write release notes
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.number }}
+          IMAGE: ${{ steps.image.outputs.name }}
+        run: |
+          # Install instructions first, then GitHub's generated changelog. The
+          # placeholders are substituted afterwards so backticks stay literal.
+          cat > notes.md <<'TEMPLATE'
+          ### Install
+
+          **Docker**
+
+          ```bash
+          docker run -d --name vidaa-edge -p 443:8443 -v vidaa-edge-data:/data __IMAGE__:__VERSION__
+          ```
+
+          **npx**
+
+          ```bash
+          sudo PORT=443 npx vidaa-edge@__VERSION__
+          ```
+
+          Then point `vidaahub.com` at this host via DNS and open `https://vidaahub.com/` on the TV.
+
+          TEMPLATE
+          sed -i "s|__IMAGE__|$IMAGE|g; s|__VERSION__|$VERSION|g" notes.md
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            --jq .body >> notes.md
+
+      - name: Create GitHub release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes-file notes.md
+
+      - name: Summary
+        run: |
+          {
+            echo "## ${{ steps.version.outputs.tag }}"
+            echo ""
+            echo "| Artifact | Status |"
+            echo "| --- | --- |"
+            echo "| npm \`vidaa-edge\` | ${{ vars.PUBLISH_NPM == 'true' && 'published' || 'skipped (set PUBLISH_NPM=true to enable)' }} |"
+            echo "| \`${{ steps.image.outputs.name }}\` | ${{ inputs.dry_run && 'built only' || 'pushed' }} |"
+            echo "| Release page | ${{ inputs.dry_run && 'skipped (dry run)' || 'created' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
