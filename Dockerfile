@@ -3,7 +3,7 @@
 # ---- build ----------------------------------------------------------------
 # Pinned to the build platform so the Angular build always runs natively, even
 # when producing arm64 images. Only the tiny runtime stage is emulated.
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY . .
 RUN npm run build:prod
 
 # ---- runtime --------------------------------------------------------------
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 
 # openssl generates the self-signed certificate on first start; tini reaps
 # zombies and forwards signals so `docker stop` is not a 10s wait.

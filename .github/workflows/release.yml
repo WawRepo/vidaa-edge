@@ -38,13 +38,13 @@ jobs:
           echo "Releases must be cut from main (got ${{ github.ref }})." >&2
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
 
@@ -149,7 +149,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan released image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.image.outputs.name }}:${{ steps.version.outputs.number }}
           format: sarif
