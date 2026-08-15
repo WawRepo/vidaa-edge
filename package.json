@@ -1,18 +1,47 @@
 {
-  "name": "@vidaa-edge/source",
+  "name": "vidaa-edge",
   "version": "0.0.0",
+  "description": "Development and remote control toolkit for VidaaOS-based TVs",
   "license": "MIT",
+  "homepage": "https://github.com/weinzii/vidaa-edge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weinzii/vidaa-edge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/weinzii/vidaa-edge/issues"
+  },
+  "keywords": [
+    "vidaa",
+    "hisense",
+    "smart-tv",
+    "pwa",
+    "remote-control"
+  ],
+  "bin": {
+    "vidaa-edge": "server/serve.js"
+  },
+  "files": [
+    "server/",
+    "dist/vidaa-edge/browser/"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "concurrently -n api,angular -c cyan,magenta \"npm run api\" \"npm run serve\"",
     "api": "node server/api-server.js",
     "serve": "nx serve --configuration=development",
+    "start:prod": "node server/serve.js",
     "build": "nx build",
     "build:prod": "nx build --configuration=production",
     "test": "nx test",
-    "lint": "nx lint"
+    "lint": "nx lint",
+    "prepublishOnly": "npm run build:prod"
   },
-  "private": true,
   "dependencies": {
+    "express": "^5.1.0",
+    "http-proxy-middleware": "^3.0.5",
     "@angular/animations": "~19.0.0",
     "@angular/common": "~19.0.0",
     "@angular/compiler": "~19.0.0",
@@ -54,8 +83,6 @@
     "concurrently": "^9.2.1",
     "eslint": "^9.8.0",
     "eslint-config-prettier": "^9.0.0",
-    "express": "^5.1.0",
-    "http-proxy-middleware": "^3.0.5",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "jest-preset-angular": "~14.4.0",
