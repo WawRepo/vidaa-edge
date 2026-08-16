@@ -37,20 +37,10 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
 
-      # Reported, not enforced. Both currently fail on pre-existing issues:
-      # four accessibility errors in code-modal.component.html, and the single
-      # spec file importing `async` from @angular/core/testing, which Angular
-      # removed in v12. Drop continue-on-error once those are fixed - the
-      # results are already visible in the log either way.
-      - name: Lint
-        continue-on-error: true
-        run: npm run lint
+      - run: npm run lint
 
-      - name: Test
-        continue-on-error: true
-        run: npm test
+      - run: npm test
 
-      # The build is the real gate: nothing ships if it does not compile.
       - run: npm run build:prod
 
       # Runtime dependencies only: a dev-only advisory never reaches the
