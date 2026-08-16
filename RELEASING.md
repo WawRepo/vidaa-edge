@@ -73,15 +73,13 @@ the workflow falls back to it.
 
 ## What gates a release
 
-The production build gates everything: if it does not compile, nothing is
-published.
+Lint, tests and the production build all gate the release: if any of them
+fails, nothing is published.
 
-Lint, tests and `npm audit` are reported but do not fail the run, because all
-three currently fail on issues that predate this pipeline — accessibility
-errors in `code-modal.component.html`, a spec file importing `async` from
-`@angular/core/testing` (removed in Angular 12), and advisories that need the
-Angular range widened. Once those are fixed, remove `continue-on-error` from
-the corresponding steps in `ci.yml` and `release.yml` to make them binding.
+`npm audit` is the exception — it reports but does not fail the run, because
+the pinned Angular range carries advisories that can only be cleared by
+widening it, which is a dependency decision rather than a release-process one.
+Dependabot proposes those bumps.
 
 ## Security scanning
 

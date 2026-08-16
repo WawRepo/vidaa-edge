@@ -55,16 +55,10 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
 
-      # Verification runs before anything is published, so a broken build cannot
-      # leave a half-released version behind. Lint and test are reported rather
-      # than enforced for now - see the note in ci.yml.
-      - name: Lint
-        continue-on-error: true
-        run: npm run lint
-
-      - name: Test
-        continue-on-error: true
-        run: npm test
+      # Verification runs before anything is published, so a failing check
+      # cannot leave a half-released version behind.
+      - run: npm run lint
+      - run: npm test
 
       # Report-only, same as CI: advisories are surfaced, but a dependency
       # advisory does not block a release that is otherwise ready.

@@ -116,10 +116,17 @@ apiApp.post('/api/save-to-public', (req, res) => {
 
     // Save each file
     files.forEach((file) => {
-      const filePath = path.join(publicDir, file.filename);
+      // Only the file name is kept: a name like "../../etc/passwd" must not
+      // escape the /public directory
+      const safeName = path.basename(String(file.filename || ''));
+      if (!safeName || safeName === '.' || safeName === '..') {
+        throw new Error(`Invalid filename: ${file.filename}`);
+      }
+
+      const filePath = path.join(publicDir, safeName);
       fsSync.writeFileSync(filePath, file.content, 'utf8');
-      savedFiles.push(file.filename);
-      console.log(`💾 Saved file: ${file.filename}`);
+      savedFiles.push(safeName);
+      console.log(`💾 Saved file: ${safeName}`);
     });
 
     res.json({
