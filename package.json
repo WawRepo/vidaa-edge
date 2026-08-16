@@ -1,6 +1,6 @@
 {
   "name": "vidaa-edge",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Development and remote control toolkit for VidaaOS-based TVs",
   "license": "MIT",
   "homepage": "https://github.com/weinzii/vidaa-edge#readme",
