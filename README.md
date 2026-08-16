@@ -47,13 +47,49 @@ A development toolkit for VidaaOS-based TVs enabling remote function exploration
 
 ## Quick Start
 
-### 1. Install Dependencies
+Two ways to run it: a released build (Docker or npx), or from source for
+development.
+
+### Run a release
+
+**Docker**
+
+```bash
+docker run -d --name vidaa-edge -p 443:8443 -v vidaa-edge-data:/data \
+  ghcr.io/weinzii/vidaa-edge:latest
+```
+
+Or with Compose, using the bundled `docker-compose.yml`:
+
+```bash
+docker compose up -d
+```
+
+**npx**
+
+```bash
+sudo PORT=443 npx vidaa-edge
+```
+
+Both serve the app and the API over HTTPS on one port, generating a
+self-signed certificate on first start. Continue with **Configure DNS** below.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PORT` | `443` | Port to serve on (`8443` in the container) |
+| `API_PORT` | `3000` | Internal API port |
+| `CERT_DIR` | `./certs` | Where `key.pem` and `cert.pem` live |
+| `TLS` | `true` | Set `false` to serve plain HTTP (the TV will refuse it) |
+
+### Run from source
+
+#### 1. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Start Development Server
+#### 2. Start Development Server
 
 ```bash
 npm start
@@ -61,15 +97,15 @@ npm start
 
 This starts both the API server (port 3000) and Angular dev server (port 443) concurrently.
 
-### 3. Configure DNS
+### Configure DNS
 
 Point `vidaahub.com` to your host IP via DNS server/your router, pihole, adguard... you name it. :-)
 
-### 4. Access on TV
+### Access on TV
 
 Open `https://vidaahub.com/` in your TV's browser.
 
-### 5. Install PWAs
+### Install PWAs
 
 Use the installer interface to add custom progressive web apps to your TV. (Restart TV after install, the installed app is now in the end of the list.)
 
@@ -82,6 +118,7 @@ Use the installer interface to add custom progressive web apps to your TV. (Rest
 | `npm start` | Start both API server and Angular dev server |
 | `npm run api` | Start only API server (port 3000) |
 | `npm run serve` | Start only Angular dev server (port 443) |
+| `npm run start:prod` | Serve the built app and API together over HTTPS |
 | `npm run build` | Build for production |
 | `npm run build:prod` | Build for production (explicit) |
 | `npm test` | Run tests |
@@ -106,6 +143,7 @@ TV (Scanner)              Development Server          Host (Controller)
 vidaa-edge/
 ├── server/                         # Backend API server
 │   ├── api-server.js               # Express API server
+│   ├── serve.js                    # Production server (static + API, HTTPS)
 │   ├── LoggingService.js           # Command logging
 │   └── TimingTrackerService.js     # Performance tracking
 ├── src/
@@ -187,6 +225,17 @@ The installer auto-detects which methods are available on your TV.
 
 - **BananaMafia Research:** [Original exploit analysis](https://bananamafia.dev/post/hisensehax/)
 - **GitHub Repository:** [weinzii/vidaa-edge](https://github.com/weinzii/vidaa-edge)
+
+---
+
+## Releases
+
+Every release publishes an npm package, a multi-architecture container image
+and a GitHub release page. Pushes to `main` also publish a rolling
+`ghcr.io/<owner>/vidaa-edge:edge` image. Dependencies are updated by Dependabot
+and images are scanned with Trivy on every pull request and release.
+
+See [RELEASING.md](RELEASING.md) for how to cut one.
 
 ---
 
